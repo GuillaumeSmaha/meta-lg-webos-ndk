@@ -8,28 +8,32 @@ BUGTRACKER = "http://bugzilla.libsdl.org/"
 SECTION = "libs"
 
 LICENSE = "Zlib"
-LIC_FILES_CHKSUM = "file://COPYING.txt;md5=b2304ad7e91711027590d3f102a754b7"
+LIC_FILES_CHKSUM = "file://COPYING.txt;md5=2d4af6adb4d89aad0cdedbcc18c9a32f"
+
+# arm-neon adds MIT license
+LICENSE_append = " ${@bb.utils.contains('PACKAGECONFIG', 'arm-neon', '& MIT', '', d)}"
+LIC_FILES_CHKSUM_append = " ${@bb.utils.contains('PACKAGECONFIG', 'arm-neon', 'file://src/video/arm/pixman-arm-neon-asm.h;md5=9a9cc1e51abbf1da58f4d9528ec9d49b;beginline=1;endline=24', '', d)}"
 
 PROVIDES = "virtual/libsdl2"
 
-DEPENDS_class-nativesdk = "${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'virtual/nativesdk-libx11 nativesdk-libxrandr nativesdk-libxrender nativesdk-libxext', '', d)}"
-
-SRC_URI = " \
-    http://www.libsdl.org/release/SDL2-${PV}.tar.gz \
-    file://linkage.patch \
-    file://0001-prepend-our-sysroot-path-so-that-make-finds-our-wayl.patch \
-    file://0002-Avoid-finding-build-host-s-wayland-scanner.patch \
-    file://fix-build-failure-on-ppc.patch \
-    file://webos-input-structs.patch \
-    file://webos-apis.patch \
+SRC_URI = "http://www.libsdl.org/release/SDL2-${PV}.tar.gz \
+           file://more-gen-depends.patch \
+           file://directfb-spurious-curly-brace-missing-e.patch \
+           file://directfb-renderfillrect-fix.patch \
+           file://CVE-2020-14409-14410.patch \
+           file://CVE-2021-33657.patch \
 "
 
 S = "${WORKDIR}/SDL2-${PV}"
 
-SRC_URI[md5sum] = "d4055424d556b4a908aa76fad63abd3c"
-SRC_URI[sha256sum] = "442038cf55965969f2ff06d976031813de643af9c9edc9e331bd761c242e8785"
+SRC_URI[md5sum] = "783b6f2df8ff02b19bb5ce492b99c8ff"
+SRC_URI[sha256sum] = "349268f695c02efbc9b9148a70b85e58cefbbf704abd3e91be654db7f1e2c863"
 
-inherit autotools lib_package binconfig pkgconfig
+inherit autotools lib_package binconfig-disabled pkgconfig
+
+BINCONFIG = "${bindir}/sdl2-config"
+
+CVE_PRODUCT = "simple_directmedia_layer sdl"
 
 EXTRA_OECONF = "--disable-oss --disable-esd --disable-arts \
                 --disable-diskaudio --disable-nas --disable-esd-shared --disable-esdtest \
@@ -37,23 +41,28 @@ EXTRA_OECONF = "--disable-oss --disable-esd --disable-arts \
                 --enable-pthreads \
                 --enable-sdl-dlopen \
                 --disable-rpath \
-                WAYLAND_PROTOCOLS_SYSROOT_DIR=${PKG_CONFIG_SYSROOT_DIR}"
+                --disable-sndio \
+                --disable-fcitx --disable-ibus \
+                "
 
 # opengl packageconfig factored out to make it easy for distros
 # and BSP layers to pick either (desktop) opengl, gles2, or no GL
-PACKAGECONFIG_GL ?= "${@bb.utils.contains('DISTRO_FEATURES', 'opengl', 'opengl', '', d)}"
+PACKAGECONFIG_GL ?= "${@bb.utils.filter('DISTRO_FEATURES', 'opengl', d)}"
 
+PACKAGECONFIG_class-native = "x11"
+PACKAGECONFIG_class-nativesdk = "${@bb.utils.filter('DISTRO_FEATURES', 'x11', d)}"
 PACKAGECONFIG ??= " \
     ${PACKAGECONFIG_GL} \
-    ${@bb.utils.contains('DISTRO_FEATURES', 'alsa', 'alsa', '', d)} \
-    ${@bb.utils.contains('DISTRO_FEATURES', 'directfb', 'directfb', '', d)} \
-    ${@bb.utils.contains('DISTRO_FEATURES', 'pulseaudio', 'pulseaudio', '', d)} \
+    ${@bb.utils.filter('DISTRO_FEATURES', 'alsa directfb pulseaudio x11', d)} \
     ${@bb.utils.contains('DISTRO_FEATURES', 'wayland', 'wayland gles2', '', d)} \
-    ${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'x11', '', d)} \
+    ${@bb.utils.contains("TUNE_FEATURES", "neon","arm-neon","",d)} \
 "
 PACKAGECONFIG[alsa]       = "--enable-alsa --disable-alsatest,--disable-alsa,alsa-lib,"
-PACKAGECONFIG[directfb]   = "--enable-video-directfb,--disable-video-directfb,directfb"
+PACKAGECONFIG[arm-neon]   = "--enable-arm-neon,--disable-arm-neon"
+PACKAGECONFIG[directfb]   = "--enable-video-directfb,--disable-video-directfb,directfb,directfb"
 PACKAGECONFIG[gles2]      = "--enable-video-opengles,--disable-video-opengles,virtual/libgles2"
+PACKAGECONFIG[jack]       = "--enable-jack,--disable-jack,jack"
+PACKAGECONFIG[kmsdrm]     = "--enable-video-kmsdrm,--disable-video-kmsdrm,libdrm virtual/libgbm"
 PACKAGECONFIG[opengl]     = "--enable-video-opengl,--disable-video-opengl,virtual/libgl"
 PACKAGECONFIG[pulseaudio] = "--enable-pulseaudio,--disable-pulseaudio,pulseaudio"
 PACKAGECONFIG[tslib]      = "--enable-input-tslib,--disable-input-tslib,tslib"
@@ -72,3 +81,5 @@ do_configure_prepend() {
 }
 
 FILES_${PN}-dev += "${libdir}/cmake"
+
+BBCLASSEXTEND = "native nativesdk"
